@@ -1,9 +1,10 @@
 // eBay API client for Node.js
 
-var restler = require('restler'),
+var Service = require('restler').Service,
     _ = require('underscore'),
     util = require('util'),
-    async = require('async');
+    async = require('async'),
+    debug = require('debug')('ebay-api:index');
 
 
 // [internal] convert params hash to url string.
@@ -102,6 +103,14 @@ var buildRequestUrl = function buildRequestUrl(serviceName, params, filters, san
     case 'Trading':   // ...and the other XML APIs
       if (sandbox) url = 'https://api.sandbox.ebay.com/ws/api.dll';
       else url = 'https://api.ebay.com/ws/api.dll';
+      
+      // params and filters don't apply to URLs w/ these
+      return url;
+      // break;
+    
+    case 'Signin':
+      if (sandbox) url = 'https://signin.sandbox.ebay.com/ws/eBayISAPI.dll?SignIn';
+      else url = 'hhttps://signin.ebay.com/ws/eBayISAPI.dll?SignIn';
       
       // params and filters don't apply to URLs w/ these
       return url;
@@ -260,7 +269,7 @@ var ebayApiGetRequest = function ebayApiGetRequest(options, callback) {
   var url = buildRequestUrl(options.serviceName, options.params, options.filters, options.sandbox);
   // console.log('url for', options.opType, 'request:\n', url.replace(/\&/g, '\n&'));
   
-  var request = restler.get(url, options.reqOptions);
+  var request = new Service().get(url, options.reqOptions);
   var data;
 
   // emitted when the request has finished whether it was successful or not
@@ -365,14 +374,20 @@ var ebayApiPostXmlRequest = function ebayApiPostXmlRequest(options, callback) {
   // console.dir(options);
 
   var url = buildRequestUrl(options.serviceName, {}, {}, options.sandbox);
-  // console.log('URL:', url);
   
   options.reqOptions.data = buildXmlInput(options.opType, options.params);
-  // console.log(options.reqOptions.data);
   
-  var request = restler.post(url, options.reqOptions);
+  debug("options.reqOptions.data : ", options.reqOptions.data)
   
-  request.on('complete', function(result, response) {
+  debug("Service", Service);
+
+  var restlerService = new Service({});
+
+  debug("restlerService", restlerService);
+
+  var request = restlerService.post(url, options.reqOptions);
+  
+  request.once('complete', function(result, response) {
     if (result instanceof Error) {
       var error = result;
       error.message = "Completed with error: " + error.message;
@@ -421,7 +436,7 @@ var ebayApiPostXmlRequest = function ebayApiPostXmlRequest(options, callback) {
 
   // emitted when some errors have occurred
   // either this OR 'completed' should fire
-  request.on('error', function(error, response) {
+  request.once('error', function(error, response) {
     error.message = "Request error: " + error.message;
     callback(error);
   });
@@ -442,7 +457,7 @@ var paginateGetRequest = function paginateGetRequest(options, callback) {
   options.perPage = options.perPage || 10;
   options.parser = options.parser || parseItemsFromResponse;
   
-  console.log('Paginated request to', options.serviceName, 'for', options.pages, 'pages of', options.perPage, 'items each');
+  debug('Paginated request to', options.serviceName, 'for', options.pages, 'pages of', options.perPage, 'items each');
   
   var mergedItems = [],   // to be merged
       pageParams = [],
@@ -467,7 +482,7 @@ var paginateGetRequest = function paginateGetRequest(options, callback) {
       var thisPageOptions = _.extend({}, options);
       thisPageOptions.params = _.extend({}, thisPageOptions.params, thisPageParams);
 
-      console.log("Requesting page", thisPageOptions.params['paginationInput.pageNumber'], 'with', thisPageOptions.params['paginationInput.entriesPerPage'], 'items...');
+      debug("Requesting page", thisPageOptions.params['paginationInput.pageNumber'], 'with', thisPageOptions.params['paginationInput.entriesPerPage'], 'items...');
 
       ebayApiGetRequest(thisPageOptions, function(error, items) {
         // console.log("Got response from page", thisPageOptions.params['paginationInput.pageNumber']);
@@ -481,7 +496,7 @@ var paginateGetRequest = function paginateGetRequest(options, callback) {
           return nextPage(new Error("Parser did not return an array, returned a " + typeof items));
         }
 
-        console.log('Got', items.length, 'items from page', thisPageOptions.params['paginationInput.pageNumber']);
+        debug('Got', items.length, 'items from page', thisPageOptions.params['paginationInput.pageNumber']);
 
         // console.log('have', mergedItems.length, 'previous items, adding', items.length, 'new items...');
         mergedItems = mergedItems.concat(items);
@@ -615,7 +630,13 @@ var parseItemsFromResponse = function parseItemsFromResponse(data, callback) {
 };
 module.exports.parseItemsFromResponse = parseItemsFromResponse;
 
+module.exports.auth = function auth(url) {
+  var regexAffil = /http\:\/\/rover\.ebay\.com\/rover/,
+      regexNonAffil = /http\:\/\/www\.ebay\.com/,
+      regexCampaign = /campid=[0-9]{5}/;
 
+  return (regexAffil.test(url) && !regexNonAffil.test(url) && regexCampaign.test(url));
+};
 
 // check if an item URL is an affiliate URL
 // non-affil URLs look like 'http://www.ebay.com...', affil URLs look like 'http://rover.ebay.com/rover...'

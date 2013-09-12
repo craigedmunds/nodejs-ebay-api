@@ -26,7 +26,7 @@ filters.domainFilter = [
 ebay.ebayApiGetRequest({
     serviceName: 'FindingService',
     opType: 'findItemsByKeywords',
-    appId: '......................',      // FILL IN YOUR OWN APP KEY, GET ONE HERE: https://publisher.ebaypartnernetwork.com/PublisherToolsAPI
+    appId: 'SellThat-c50c-4ead-b609-8445f1218c7a',      // FILL IN YOUR OWN APP KEY, GET ONE HERE: https://publisher.ebaypartnernetwork.com/PublisherToolsAPI
     params: params,
     filters: filters,
     parser: ebay.parseItemsFromResponse    // (default)
